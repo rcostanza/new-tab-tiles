@@ -1,0 +1,32 @@
+name: Publish WebExtension to Firefox Add-ons
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '14'
+
+    - name: Install web-ext
+      run: npm install -g web-ext
+
+    - name: Zip the webextension folder
+      run: zip -r webextension.zip webextension
+
+    - name: Publish to Firefox Add-ons
+      env:
+        WEB_EXT_API_KEY: ${{ secrets.FIREFOX_API_KEY }}
+        WEB_EXT_API_SECRET: ${{ secrets.FIREFOX_API_SECRET }}
+      run: |
+        web-ext sign --source-dir=webextension --api-key=$WEB_EXT_API_KEY --api-secret=$WEB_EXT_API_SECRET --artifacts-dir=./
