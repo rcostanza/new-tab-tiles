@@ -1,0 +1,23 @@
+{
+    "manifest_version": 3,
+    "name": "New Tab Flow",
+    "version": "0.0.0.2",
+    "description": "A minimalist but flexible new tab.",
+    "icons": {
+        "48": "icons/48.png",
+        "128": "icons/128.png"
+    },
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "setembro@gmail.com"
+        }
+    },
+    "permissions": [
+        "bookmarks",
+        "storage",
+        "favicon"
+    ],
+    "chrome_url_overrides": {
+        "newtab": "newTab.html"
+    }
+}

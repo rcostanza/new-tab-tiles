@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>New Tab</title>
+<link rel="stylesheet" type="text/css" href="newTab.css">
+<script src="newTab.js"></script>
+</head>
+<body class="locked">
+<div class="grid"></div>
+<div class="toast"><span class="message"></span></div>
+<span class="line vertical-line"></span>
+<span class="line horizontal-line"></span>
+<div id="tile-options">
+    <div class="buttons">
+        <button id="options-save">Save</button>
+        <button id="options-cancel">Cancel</button>
+    </div>
+    <div>
+        <label for="title">Name</label>
+        <input type="text" id="title" name="title" required>
+        <div class="aside">
+            <input type="checkbox" id="show-title" />
+            <label for="show-title">Show?</label>
+        </div>
+    </div>
+    <div>
+        <label for="url">URL</label>
+        <input type="text" id="url" name="url" required>
+    </div>
+    <div>
+        <label for="opacity">Opacity</label>
+        <input type="range" min="10" max="100" id="opacity" />
+        <span id="opacity-value"></span>
+    </div>
+    <div>
+        <label for="parent-tile">Parent</label>
+        <input type="checkbox" id="parent-tile" />
+    </div>
+    <span id="parent-options">
+        <div>
+            <label for="parent">Children direction</label>
+            <select id="parent-children-direction">
+                <option value="up">Up</option>
+                <option value="down">Down</option>
+                <option value="left">Left</option>
+                <option value="right">Right</option>
+            </select>
+        </div>
+        <div id="parent-children">
+            <label>Children type</label>
+            <span>
+                <input type="radio" id="parent-children-list" name="parent-children" value="list" />
+                <label for="parent-children-list">List</label>
+                <input type="radio" id="parent-children-bookmarks" name="parent-children" value="bookmarks" />
+                <label for="parent-children-bookmarks">Bookmarks</label>
+            </span>
+        </div>
+        <select id="parent-children-bookmarks-list"></select>
+        <textarea id="parent-children-list-list" placeholder="Label|URL
+Label2|URL2"></textarea>
+    </span>
+</div>
+</body>
+</html>
