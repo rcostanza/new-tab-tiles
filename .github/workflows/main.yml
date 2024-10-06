@@ -29,4 +29,4 @@ jobs:
         WEB_EXT_API_KEY: ${{ secrets.FIREFOX_API_KEY }}
         WEB_EXT_API_SECRET: ${{ secrets.FIREFOX_API_SECRET }}
       run: |
-        web-ext sign --source-dir=webextension --api-key=$WEB_EXT_API_KEY --api-secret=$WEB_EXT_API_SECRET --artifacts-dir=./
+        web-ext sign --channel=unlisted --source-dir=webextension --api-key=$WEB_EXT_API_KEY --api-secret=$WEB_EXT_API_SECRET --artifacts-dir=./
