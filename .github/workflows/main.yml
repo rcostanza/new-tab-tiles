@@ -18,6 +18,17 @@ jobs:
       with:
         node-version: '20'
 
+    - name: Read version from manifest.json
+      id: read_version
+      run: |
+        VERSION=$(jq -r '.version' webextension/manifest.json)
+        echo "::set-output name=VERSION::$VERSION"
+
+    - name: Create tag
+      run: |
+        git tag ${{ steps.read_version.outputs.VERSION }}
+        git push origin ${{ steps.read_version.outputs.VERSION }}
+
     - name: Install web-ext
       run: npm install -g web-ext
 
