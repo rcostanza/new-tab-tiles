@@ -1,4 +1,4 @@
-const SNAP = 20;
+const SNAP = 10;
 
 const Utils = {
     trimImageSize: function(image, width, height, format, maxSizeKB) {
@@ -51,6 +51,8 @@ const Utils = {
 }
 
 const Canvas = {
+    width: window.innerWidth,
+    height: window.innerHeight,
     load: function() {
         Storage.get().then((data) => {
             document.body.style.backgroundImage = (data.canvas && data.canvas.backgroundImage) ? data.canvas.backgroundImage : null;
@@ -113,6 +115,9 @@ const Canvas = {
     },
     save: function() {
         Storage.saveCanvas(Canvas.getData());
+    },
+    appendChild: function(child) {
+        document.body.appendChild(child);
     }
 }
 
@@ -133,7 +138,7 @@ const ContextMenu = {
         const existingMenu = document.querySelector('.context-menu');
         if (existingMenu) existingMenu.remove();
 
-        document.body.appendChild(menu);
+        Canvas.appendChild(menu);
 
         let x = event.clientX,
             y = event.clientY,
@@ -169,7 +174,7 @@ const Tile = {
         }
     },
     create: function(event, tileData) {
-        const tile = document.createElement('div');
+        const tile = document.createElement('a');
         tile.classList.add('tile');
 
         const sizeOverlay = document.createElement("div");
@@ -208,11 +213,13 @@ const Tile = {
         }
         tile.setAttribute('data-id', uuid);
 
-        tile.addEventListener("click", Tile.clickAction)
         tile.addEventListener("mouseenter", Tile.showChildren);
         tile.addEventListener("mouseleave", Tile.hideChildren);
+        tile.addEventListener("click", (event) => {
+            if(!Canvas.isLocked()) event.preventDefault();
+        });
 
-        document.body.appendChild(tile);
+        Canvas.appendChild(tile);
         Tile.updateOverlay(tile);
         return tile;
     },
@@ -221,20 +228,23 @@ const Tile = {
             tile.setAttribute("data-title", tile.options.title);
             tile.style.opacity = tile.options.opacity/100;
             tile.options.showTitle ? tile.classList.add("show-title") : tile.classList.remove('show-title');
+            if(tile.options.url.trim() != "") {
+                tile.href = tile.options.url;
+            } else {
+                tile.removeAttribute("href");
+            }
         }
     },
     updateOverlay: function(tile) {
         tile.querySelector('.size-overlay').innerText = `${tile.offsetWidth}x${tile.offsetHeight}`;
     },
     save: function(tile) {
-        Storage.saveTile(Tile.getData(tile));
+        const relativeSize = Tile.getRelativeSize(tile);
+        tile.style.width = `${relativeSize.width * 100}%`;
+        tile.style.height = `${relativeSize.height * 100}%`;
 
-        if(tile.options) {
-            with(tile) {
-                setAttribute('data-title', options.title);
-                options.showTitle ? classList.add('show-title') : classList.remove('show-title');
-            }
-        }
+        Storage.saveTile(Tile.getData(tile));
+        if(tile.options) Tile.updateFromOptions(tile);
     },
     delete: function() {
         const tile = document.querySelector(".tile.selected"),
@@ -268,20 +278,6 @@ const Tile = {
             Toast.show(`Restored ${lastAction.options.title || lastAction.id}`);
         } else {
             Toast.show("Nothing to undelete");
-        }
-    },
-    clickAction: function(event) {
-        if(!Canvas.isLocked()) return;
-        const tile = event.target.closest('.tile');
-        if (tile) {
-            const options = tile.options;
-            if (options.url) {
-                if(event.ctrlKey) {
-                    window.open(options.url, '_blank');
-                } else {
-                    location.href = options.url;
-                }
-            }
         }
     },
     showChildren: function(event) {
@@ -451,6 +447,14 @@ const Tile = {
             height: tile.style.height,
             backgroundImage: tile.style.backgroundImage || null,
             options: tile.options || {}
+        }
+    },
+    getRelativeSize: function(tile) {
+        const tileRect = tile.getBoundingClientRect(),
+            canvasRect = document.body.getBoundingClientRect();
+        return {
+            width: tileRect.width / canvasRect.width + 0.0000001,
+            height: tileRect.height / canvasRect.height + 0.0000001
         }
     },
 }
@@ -758,47 +762,58 @@ document.addEventListener('mousedown', function(event) {
         let shiftX = event.clientX - tile.getBoundingClientRect().left;
         let shiftY = event.clientY - tile.getBoundingClientRect().top;
 
-        function moveAt(pageX, pageY) {
-            const snappedX = Math.round((pageX - shiftX) / SNAP) * SNAP;
-            const snappedY = Math.round((pageY - shiftY) / SNAP) * SNAP;
+        let offsetX = (Canvas.width/2) % SNAP, offsetY = (Canvas.height/2) % SNAP;
+
+        function onMouseMove(event) {
+            const snappedX = (Math.round((event.pageX - shiftX) / SNAP) * SNAP) + offsetX;
+            const snappedY = (Math.round((event.pageY - shiftY) / SNAP) * SNAP) + offsetY;
             tile.style.left = snappedX + 'px';
             tile.style.top = snappedY + 'px';
         }
 
-        function onMouseMove(event) {
-            moveAt(event.pageX, event.pageY);
+        function onMouseUp() {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseMove);
+            const tile = document.querySelector(".tile.dragging");
+            if (tile && !Canvas.isLocked()) {
+                tile.classList.remove("dragging");
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                const tileRect = tile.getBoundingClientRect();
+
+                const leftPercent = (tileRect.left / viewportWidth) * 100;
+                const topPercent = (tileRect.top / viewportHeight) * 100;
+
+                tile.style.left = `${leftPercent}%`;
+                tile.style.top = `${topPercent}%`;
+
+                Tile.save(tile);
+            }
         }
 
         document.addEventListener('mousemove', onMouseMove);
-
-        tile.onmouseup = function() {
-            document.removeEventListener('mousemove', onMouseMove);
-            tile.onmouseup = null;
-        };
-
+        document.addEventListener("mouseup", onMouseUp);
     }
 });
 
 document.addEventListener('dragstart', function(event) {
-    if (event.target.closest('.tile') && !Canvas.isLocked()) {
-        event.preventDefault();
-    }
+    event.preventDefault();
 });
 
 document.addEventListener('wheel', function(event) {
     if (event.shiftKey && event.target.closest('.tile')) {
         event.preventDefault();
         const tile = event.target.closest('.tile'),
-            style = window.getComputedStyle(tile),
-            width = parseInt(style.width),
-            height = parseInt(style.height);
+            rect = tile.getBoundingClientRect(),
+            width = parseInt(rect.width),
+            height = parseInt(rect.height);
 
         if (event.deltaY < 0) { // Scroll up
-            if(!event.ctrlKey) tile.style.width = `${width + SNAP}px`;
-            tile.style.height = `${height + SNAP}px`;
+            if(!event.ctrlKey) tile.style.width = `${(width + SNAP) - (width % SNAP)}px`;
+            tile.style.height = `${(height + SNAP) - (height % SNAP)}px`;
         } else { // Scroll down
-            if(!event.ctrlKey) tile.style.width = `${width - SNAP}px`;
-            tile.style.height = `${height - SNAP}px`;
+            if(!event.ctrlKey) tile.style.width = `${(width - SNAP) - (width % SNAP)}px`;
+            tile.style.height = `${(height - SNAP) - (height % SNAP)}px`;
         }
         Tile.save(tile);
         Tile.updateOverlay(tile);
@@ -808,34 +823,13 @@ document.addEventListener('wheel', function(event) {
 document.addEventListener('auxclick', function(event) {
     const tile = event.target.closest('.tile');
     if (event.button === 1 && tile) {
-        if(Canvas.isLocked()) {
-            event.preventDefault();
-            Tile.clickAction({ctrlKey: true, target: tile});
-        } else {
+        if(!Canvas.isLocked()) {
             event.preventDefault();
             tile.style.width = null; // Default width
             tile.style.height = null; // Default height
             Tile.updateOverlay(tile);
             Tile.save(tile);
         }
-    }
-});
-
-document.addEventListener('mouseup', function(event) {
-    const tile = event.target.closest(".tile");
-    if (tile && !Canvas.isLocked()) {
-        tile.classList.remove("dragging");
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-        const tileRect = tile.getBoundingClientRect();
-
-        const leftPercent = (tileRect.left / viewportWidth) * 100;
-        const topPercent = (tileRect.top / viewportHeight) * 100;
-
-        tile.style.left = `${leftPercent}%`;
-        tile.style.top = `${topPercent}%`;
-
-        Tile.save(tile);
     }
 });
 
@@ -846,4 +840,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
 document.addEventListener('dblclick', function(event) {
     if(event.target == document.body) Canvas.toggleLock();
+});
+
+window.addEventListener("resize", function() {
+    const windowWidth = window.innerWidth, windowHeight = window.innerHeight;
+
+    Canvas.width = windowWidth;
+    Canvas.height = windowHeight;
+
+    for(let tile of document.querySelectorAll('.tile')) {
+        Tile.updateOverlay(tile);
+    }
 });

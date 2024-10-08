@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "New Tab Tiles",
-    "version": "0.0.0.3",
+    "version": "0.0.0.4",
     "description": "A minimalist but flexible new tab.",
     "icons": {
         "48": "icons/48.png",
@@ -9,7 +9,7 @@
     },
     "browser_specific_settings": {
         "gecko": {
-            "id": "setembro@gmail.com"
+            "id": "{c8b6a92c-2e32-498b-a30a-fcd346e4df48}"
         }
     },
     "permissions": [
