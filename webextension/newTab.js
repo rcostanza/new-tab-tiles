@@ -302,38 +302,36 @@ const Tile = {
             } );
             overlay.classList.add(`direction-${tile.options.parentChildrenDirection}`);
 
+            let links = [];
+
             if (tile.options.parentChildren === 'list') {
                 const childrenList = tile.options.childrenList.split('\n');
                 childrenList.forEach(child => {
-                    let [text, ...link] = child.split("|");
-                    link = link.join("|");
-                    const childDiv = document.createElement("A");
-                    childDiv.textContent = text;
-                    if(link) childDiv.href = link;
-                    overlay.appendChild(childDiv);
+                    let [title, ...url] = child.split("|");
+                    url = url.join("|");
+                    links.push([title, url]);
                 });
             } else if (tile.options.parentChildren === 'bookmarks') {
                 const bookmarkFolderId = tile.options.childrenBookmarkList;
-                const bookmarks = Bookmarks.list[bookmarkFolderId].children;
-                bookmarks.forEach(bookmark => {
+                Bookmarks.list[bookmarkFolderId].children.forEach(bookmark => {
                     if(bookmark.id == bookmarkFolderId || bookmark.type == "folder") return;
-                    const bookmarkLink = document.createElement('a');
-                    bookmarkLink.innerText = bookmark.title.length > 50 ? bookmark.title.substring(0, 50) + '...' : bookmark.title;
-                    bookmarkLink.href = bookmark.url;
-
-                    const bookmarkIcon = document.createElement('img');
-                    bookmarkIcon.width = 16;
-                    bookmarkIcon.height = 16;
-                    bookmarkIcon.src = Utils.getFavicon(bookmark.url);
-
-                    if(tile.options.parentChildrenDirection == "left") {
-                        bookmarkLink.appendChild(bookmarkIcon);
-                    } else {
-                        bookmarkLink.prepend(bookmarkIcon);
-                    }
-                    overlay.appendChild(bookmarkLink);
+                    links.push([bookmark.title, bookmark.url]);
                 });
             }
+
+            for(let [title, url] of links) {
+                const link = document.createElement('a');
+                link.innerText = title.length > 50 ? title.substring(0, 50) + '...' : title;
+                link.href = url;
+
+                const icon = document.createElement('img');
+                icon.width = 16;
+                icon.height = 16;
+                icon.src = Utils.getFavicon(url);
+
+                tile.options.parentChildrenDirection == "left" ? link.appendChild(icon) : link.prepend(icon);
+                overlay.appendChild(link);
+            };
 
             overlay.style.margin = "unset";
             overlay.style.left = "";
