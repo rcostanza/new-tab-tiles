@@ -1,4 +1,4 @@
-name: Publish WebExtension to Firefox Add-ons
+name: Publish WebExtension
 
 on:
   push:
@@ -18,7 +18,7 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: 'latest'
 
     - name: Read version from manifest.json
       id: read_version
@@ -31,8 +31,8 @@ jobs:
         git tag ${{ steps.read_version.outputs.VERSION }}
         git push origin ${{ steps.read_version.outputs.VERSION }}
 
-    - name: Install web-ext
-      run: npm install -g web-ext
+    - name: Install web-ext and Chrome Web Store CLI
+      run: npm install -g web-ext chrome-webstore-upload-cli
 
     - name: Zip the webextension folder
       run: zip -r webextension.zip webextension
@@ -43,3 +43,18 @@ jobs:
         WEB_EXT_API_SECRET: ${{ secrets.FIREFOX_API_SECRET }}
       run: |
         web-ext sign --channel=unlisted --source-dir=webextension --api-key=$WEB_EXT_API_KEY --api-secret=$WEB_EXT_API_SECRET --artifacts-dir=./
+
+    - name: Publish to Chrome Web Store
+      env:
+        EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+        CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+        CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+        REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      run: |
+        chrome-webstore-upload upload \
+          --source webextension.zip \
+          --extension-id $EXTENSION_ID \
+          --client-id $CLIENT_ID \
+          --client-secret $CLIENT_SECRET \
+          --refresh-token $REFRESH_TOKEN \
+          --keep-private
