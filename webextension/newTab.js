@@ -859,10 +859,8 @@ const Bookmarks = {
         a.title = bookmark.title ? `${bookmark.title}\n${truncatedUrl}` : truncatedUrl;
         const icon = document.createElement("img");
         icon.classList.add("bm-icon");
-        icon.width = 16;
-        icon.height = 16;
         if (bookmark.url) icon.src = Utils.getFavicon(bookmark.url);
-        icon.onerror = function() { this.style.display = "none"; };
+        icon.onerror = () => icon.classList.add("bm-icon-error");
         a.appendChild(icon);
         const label = document.createElement("span");
         label.classList.add("bm-label");
@@ -876,8 +874,6 @@ const Bookmarks = {
         div.title = folder.title || "";
         const icon = document.createElement("img");
         icon.classList.add("bm-folder-icon");
-        icon.width = 18;
-        icon.height = 18;
         const api = Utils.isFirefox ? browser : chrome;
         const isLightMode = document.documentElement.getAttribute('data-color-scheme') === 'light';
         icon.src = api.runtime.getURL(isLightMode ? "icons/folder-light.svg" : "icons/folder.svg");
@@ -1074,12 +1070,9 @@ const Bookmarks = {
         overflowBtn.title = "More bookmarks";
         const overflowIcon = document.createElement("img");
         overflowIcon.classList.add("bm-icon");
-        overflowIcon.width = 16;
-        overflowIcon.height = 16;
         const api = Utils.isFirefox ? browser : chrome;
         const isLightMode = document.documentElement.getAttribute('data-color-scheme') === 'light';
         overflowIcon.src = api.runtime.getURL(isLightMode ? "icons/overflow-light.svg" : "icons/overflow.svg");
-        overflowIcon.style.filter = "var(--bookmarks-icon-filter, none)";
         overflowBtn.appendChild(overflowIcon);
         
         const overflowDropdown = document.createElement("div");
@@ -1217,10 +1210,10 @@ document.addEventListener('wheel', function(event) {
             height = parseInt(rect.height);
 
         if (event.deltaY < 0) { // Scroll up
-            if(!event.ctrlKey) tile.style.width = `${(width + SNAP) - (width % SNAP)}px`;
+            if(!event.altKey) tile.style.width = `${(width + SNAP) - (width % SNAP)}px`;
             tile.style.height = `${(height + SNAP) - (height % SNAP)}px`;
         } else { // Scroll down
-            if(!event.ctrlKey) tile.style.width = `${(width - SNAP) - (width % SNAP)}px`;
+            if(!event.altKey) tile.style.width = `${(width - SNAP) - (width % SNAP)}px`;
             tile.style.height = `${(height - SNAP) - (height % SNAP)}px`;
         }
         Tile.save(tile);

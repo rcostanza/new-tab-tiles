@@ -431,8 +431,10 @@ BODY {
     }
 
     .bm-folder-icon {
-        font-size: 12px;
-        line-height: 1;
+        width: 18px;
+        height: 18px;
+        min-width: 18px;
+        object-fit: contain;
     }
 
     .bm-label {
@@ -454,6 +456,10 @@ BODY {
         max-width: unset;
         padding: 2px 6px;
         border-radius: 4px;
+
+        .bm-icon {
+            filter: var(--bookmarks-icon-filter, none);
+        }
 
         & > .bm-label {
             font-size: 12px;
@@ -574,7 +580,10 @@ BODY {
         }
 
         .bm-folder-icon {
-            font-size: 14px;
+            width: 18px;
+            height: 18px;
+            min-width: 18px;
+            object-fit: contain;
             flex-shrink: 0;
         }
 
@@ -613,6 +622,10 @@ BODY {
             top: -4px;
             left: 100%;
         }
+}
+
+.bm-icon-error {
+    display: none;
 }
 
 .bm-dropdown .bm-dropdown-separator {
