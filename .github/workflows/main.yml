@@ -44,7 +44,7 @@ jobs:
       run: |
         web-ext sign --channel=unlisted --source-dir=webextension --api-key=$WEB_EXT_API_KEY --api-secret=$WEB_EXT_API_SECRET --artifacts-dir=./
 
-    - name: Publish to Chrome Web Store
+    - name: Upload to Chrome Web Store
       env:
         EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
         CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
@@ -56,5 +56,17 @@ jobs:
           --extension-id $EXTENSION_ID \
           --client-id $CLIENT_ID \
           --client-secret $CLIENT_SECRET \
-          --refresh-token $REFRESH_TOKEN \
-          --keep-private
+          --refresh-token $REFRESH_TOKEN
+
+    - name: Publish to Chrome Web Store
+      env:
+        EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+        CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+        CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+        REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      run: |
+        chrome-webstore-upload publish \
+          --extension-id $EXTENSION_ID \
+          --client-id $CLIENT_ID \
+          --client-secret $CLIENT_SECRET \
+          --refresh-token $REFRESH_TOKEN
