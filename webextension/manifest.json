@@ -15,7 +15,8 @@
     "permissions": [
         "bookmarks",
         "storage",
-        "favicon"
+        "favicon",
+        "theme"
     ],
     "chrome_url_overrides": {
         "newtab": "newTab.html"

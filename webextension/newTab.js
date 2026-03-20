@@ -1,4 +1,73 @@
 const SNAP = 10;
+const MAX_TITLE_LENGTH = 80;
+
+const Theme = {
+    apply: function(colors) {
+        const root = document.documentElement;
+        // toolbar is the most accurate for the bookmarks bar bg; fall back to frame
+        const toolbarBg = colors.toolbar || colors.frame;
+        if (toolbarBg) {
+            root.style.setProperty('--bookmarks-toolbar-bg', toolbarBg);
+            // Derive a slightly offset dropdown bg from toolbar color
+            root.style.setProperty('--bookmarks-dropdown-bg', toolbarBg);
+        }
+        // toolbar_text takes priority over icons for text color
+        const textColor = colors.toolbar_text || colors.icons || colors.tab_text;
+        if (textColor) root.style.setProperty('--bookmarks-toolbar-text', textColor);
+        // Use toolbar_top_separator or toolbar_field_border for divider
+        const borderColor = colors.toolbar_top_separator || colors.toolbar_field_border;
+        if (borderColor) root.style.setProperty('--bookmarks-toolbar-border', borderColor);
+        // Derive hover bg from text color at low opacity
+        if (textColor) root.style.setProperty('--bookmarks-item-hover-bg', `color-mix(in srgb, ${textColor} 10%, transparent)`);
+    },
+    detectAndApplyScheme: function() {
+        // Detect system/OS color scheme preference (works on all browsers)
+        const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.setAttribute('data-color-scheme', isDark ? 'dark' : 'light');
+        
+        // Update folder icon sources based on color scheme
+        const folderIcons = document.querySelectorAll('.bm-folder-icon');
+        const api = Utils.isFirefox ? browser : chrome;
+        folderIcons.forEach(icon => {
+            icon.src = api.runtime.getURL(isDark ? "icons/folder.svg" : "icons/folder-light.svg");
+        });
+        
+        // Update overflow icon source based on color scheme
+        const overflowIcon = document.querySelector('.bm-overflow .bm-icon');
+        if (overflowIcon) {
+            overflowIcon.src = api.runtime.getURL(isDark ? "icons/overflow.svg" : "icons/overflow-light.svg");
+        }
+    },
+    load: function() {
+        // Detect OS color scheme on all browsers
+        Theme.detectAndApplyScheme();
+        
+        // Listen for color scheme changes
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                Theme.detectAndApplyScheme();
+            });
+        }
+
+        // For Firefox, also try to use the theme API for more accurate theme colors
+        if (!Utils.isFirefox) return;
+        
+        const api = browser;
+        if (!api.theme) return;
+        try {
+            api.theme.getCurrent((theme) => {
+                if (theme && theme.colors) Theme.apply(theme.colors);
+            });
+        } catch (e) {
+            console.warn('Theme API not available:', e);
+        }
+        if (api.theme.onUpdated) {
+            api.theme.onUpdated.addListener((updateInfo) => {
+                if (updateInfo.theme && updateInfo.theme.colors) Theme.apply(updateInfo.theme.colors);
+            });
+        }
+    }
+};
 
 const Utils = {
     trimImageSize: function(image, width, height, format, maxSizeKB) {
@@ -57,6 +126,7 @@ const Canvas = {
         Storage.get().then((data) => {
             document.body.style.backgroundImage = (data.canvas && data.canvas.backgroundImage) ? data.canvas.backgroundImage : null;
             for(let tile in data.tiles) Tile.create(null, data.tiles[tile]);
+            Bookmarks.initToolbar();
         });
     },
     clear: function(force) {
@@ -71,21 +141,7 @@ const Canvas = {
         return document.body.classList.contains("locked");
     },
     showContextMenu: function(event) {
-        let items = [
-            { label: 'New tile', action: Tile.create },
-            { label: 'Clear all tiles', action: Canvas.clear }
-        ];
-
-        if(document.body.style.backgroundImage) {
-            items.push({ label: 'Clear background', action: Canvas.clearBackground });
-        } else {
-            items.push({ label: 'Set background from file', action: Canvas.setBackground });
-        }
-        items.push(
-            { label: 'Import', action: Storage.import },
-            { label: 'Export', action: Storage.export },
-        );
-        ContextMenu.show(event, items);
+        ContextMenu.show(event, ContextMenu.getDefaultItems());
     },
     toggleLock: function() {
         if(Canvas.isLocked()) {
@@ -122,6 +178,24 @@ const Canvas = {
 }
 
 const ContextMenu = {
+    getDefaultItems: function() {
+        let items = [
+            { label: 'New tile', action: Tile.create },
+            { label: 'Clear all tiles', action: Canvas.clear }
+        ];
+
+        if(document.body.style.backgroundImage) {
+            items.push({ label: 'Clear background', action: Canvas.clearBackground });
+        } else {
+            items.push({ label: 'Set background from file', action: Canvas.setBackground });
+        }
+        items.push(
+            { label: 'Import', action: Storage.import },
+            { label: 'Export', action: Storage.export },
+            { label: 'Toggle bookmarks toolbar', action: Bookmarks.toggleToolbarState }
+        );
+        return items;
+    },
     show: function(event, items) {
         if(Canvas.isLocked()) return;
 
@@ -321,7 +395,7 @@ const Tile = {
 
             for(let [title, url] of links) {
                 const link = document.createElement('a');
-                link.innerText = title.length > 50 ? title.substring(0, 50) + '...' : title;
+                link.innerText = title.length > MAX_TITLE_LENGTH ? title.substring(0, MAX_TITLE_LENGTH) + '...' : title;
                 link.href = url;
 
                 const icon = document.createElement('img');
@@ -621,6 +695,12 @@ const Storage = {
     get: function(fn) {
         return Storage._.get();
     },
+    setOption: function(key, value) {
+        return Storage._.get("canvas").then((data) => {
+            data.canvas[key] = value;
+            Storage.saveCanvas(data.canvas);
+        });
+    },
     saveTile: function(tileData) {
         Storage.getTiles((data) => {
             data[tileData.id] = tileData;
@@ -632,6 +712,15 @@ const Storage = {
     },
     getTiles: function(fn) {
         Storage._.get("tiles").then((data) => fn(data.tiles || {}));
+    },
+    getBookmarksToolbarState: function(fn) {
+        Storage._.get("canvas").then((data) => {
+            console.log(data);
+            fn(data.canvas.bookmarksToolbarEnabled || false);
+        });
+    },
+    setBookmarksToolbarState: function(state, fn) {
+        Storage.setOption("bookmarksToolbarEnabled", state).then(fn);
     },
     deleteTile: function(id) {
         Storage.getTiles((data) => {
@@ -669,11 +758,16 @@ const Storage = {
 }
 
 const Bookmarks = {
+    TOOLBAR_FOLDER_ID: Utils.isFirefox ? "toolbar_____" : "1",
     load: function() {
         return Bookmarks.getFolders().then(folders => {
             for(let folder of folders) {
-                const folderID = folder.id == "root________" ? 0 : folder.id;
+                const isRoot = folder.id === "root________" || folder.id === "0";
+                const folderID = isRoot ? 0 : folder.id;
                 Bookmarks.list[folderID] = folder;
+            }
+            if (document.querySelector("#bookmarksToolbar.visible")) {
+                Bookmarks.renderToolbar();
             }
         });
     },
@@ -692,6 +786,322 @@ const Bookmarks = {
             }
             tree.forEach(getFolders);
             return folders;
+        });
+    },
+    toggleToolbarState: function() {
+        Storage.getBookmarksToolbarState((isToolbarEnabled) => {
+            Storage.setBookmarksToolbarState(!isToolbarEnabled);
+            Bookmarks.toggleToolbar(!isToolbarEnabled);
+        });
+    },
+    initToolbar: function() {
+        // Called on page load — applies toolbar state without animation
+        Storage.getBookmarksToolbarState((state) => {
+            let toolbar = document.querySelector("#bookmarksToolbar");
+            if (!state) {
+                document.body.classList.remove("bookmarksToolbarEnabled");
+                toolbar.classList.remove("visible");
+            } else {
+                document.body.classList.add("bookmarksToolbarEnabled");
+                toolbar.classList.add("visible");
+                Bookmarks.renderToolbar();
+            }
+        });
+    },
+    toggleToolbar: function(state) {
+        if(state == null) {
+            Storage.getBookmarksToolbarState(this.toggleToolbar);
+            return;
+        }
+        let toolbar = document.querySelector("#bookmarksToolbar");
+        toolbar.classList.add("bm-animate");
+        if(!state) {
+            document.body.classList.remove("bookmarksToolbarEnabled");
+            toolbar.classList.remove("visible");
+        } else {
+            document.body.classList.add("bookmarksToolbarEnabled");
+            toolbar.classList.add("visible");
+            Bookmarks.renderToolbar();
+        };
+    },
+    renderToolbar: function() {
+        const toolbar = document.querySelector("#bookmarksToolbar");
+        if (!toolbar.classList.contains("visible")) return;
+        toolbar.innerHTML = "";
+        const toolbarFolder = Bookmarks.list[Bookmarks.TOOLBAR_FOLDER_ID];
+        if (!toolbarFolder || !toolbarFolder.children) return;
+        for (const bookmark of toolbarFolder.children) {
+            const el = Bookmarks.createItem(bookmark, false);
+            if (el) toolbar.appendChild(el);
+        }
+        requestAnimationFrame(Bookmarks.handleOverflow);
+    },
+    createItem: function(bookmark, isDropdown) {
+        const isFolder = bookmark.type === "folder" || (bookmark.children !== undefined && bookmark.type !== "bookmark");
+        let el;
+        if (bookmark.type === "separator") {
+            el = document.createElement("div");
+            el.classList.add(isDropdown ? "bm-dropdown-separator" : "bm-toolbar-separator");
+        } else if (isFolder) {
+            el = Bookmarks.createFolderItem(bookmark, isDropdown);
+        } else {
+            el = Bookmarks.createBookmarkItem(bookmark, isDropdown);
+        }
+        el._bookmarkData = bookmark;
+        return el;
+    },
+    createBookmarkItem: function(bookmark, isDropdown) {
+        const a = document.createElement("a");
+        a.classList.add(isDropdown ? "bm-dropdown-item" : "bm-toolbar-item", "bm-bookmark");
+        a.href = bookmark.url || "#";
+        const url = bookmark.url || "";
+        const truncatedUrl = url.length > 100 ? url.slice(0, 100) + "..." : url;
+        a.title = bookmark.title ? `${bookmark.title}\n${truncatedUrl}` : truncatedUrl;
+        const icon = document.createElement("img");
+        icon.classList.add("bm-icon");
+        icon.width = 16;
+        icon.height = 16;
+        if (bookmark.url) icon.src = Utils.getFavicon(bookmark.url);
+        icon.onerror = function() { this.style.display = "none"; };
+        a.appendChild(icon);
+        const label = document.createElement("span");
+        label.classList.add("bm-label");
+        label.textContent = bookmark.title || bookmark.url || "";
+        a.appendChild(label);
+        return a;
+    },
+    createFolderItem: function(folder, isDropdown) {
+        const div = document.createElement("div");
+        div.classList.add(isDropdown ? "bm-dropdown-item" : "bm-toolbar-item", "bm-folder");
+        div.title = folder.title || "";
+        const icon = document.createElement("img");
+        icon.classList.add("bm-folder-icon");
+        icon.width = 18;
+        icon.height = 18;
+        const api = Utils.isFirefox ? browser : chrome;
+        const isLightMode = document.documentElement.getAttribute('data-color-scheme') === 'light';
+        icon.src = api.runtime.getURL(isLightMode ? "icons/folder-light.svg" : "icons/folder.svg");
+        div.appendChild(icon);
+        const label = document.createElement("span");
+        label.classList.add("bm-label");
+        label.textContent = folder.title || "";
+        div.appendChild(label);
+        if (folder.children && folder.children.length > 0) {
+            const dropdown = document.createElement("div");
+            dropdown.classList.add("bm-dropdown");
+            for (const child of folder.children) {
+                const childEl = Bookmarks.createItem(child, true);
+                if (childEl) dropdown.appendChild(childEl);
+            }
+            Bookmarks.setupDropdownScroll(dropdown);
+            if (!isDropdown) {
+                div.appendChild(dropdown);
+            } else {
+                div._subDropdown = dropdown;
+            }
+        }
+        if (!isDropdown) {
+            // Toolbar folder: click to toggle open/close
+            div.addEventListener("click", function(e) {
+                e.stopPropagation();
+                const isOpen = div.classList.contains("open");
+                Bookmarks.closeAllDropdowns();
+                if (!isOpen) {
+                    div.classList.add("open");
+                    document.addEventListener("click", Bookmarks.closeAllDropdowns, { once: true });
+                }
+            });
+            // Hover-switch when another toolbar folder is already open
+            div.addEventListener("mouseenter", function() {
+                const toolbar = document.querySelector("#bookmarksToolbar");
+                const anyOpen = toolbar && toolbar.querySelector(".bm-toolbar-item.bm-folder.open");
+                if (anyOpen && anyOpen !== div) {
+                    anyOpen.classList.remove("open");
+                    div.classList.add("open");
+                }
+            });
+        } else if (div._subDropdown) {
+            const sub = div._subDropdown;
+            const closeThisPortal = () => {
+                // Remove sub and any of its descendant portals, but not sibling portals
+                document.querySelectorAll(".bm-dropdown-portal").forEach(p => {
+                    let ancestor = p;
+                    while (ancestor) {
+                        if (ancestor === sub) { p.remove(); return; }
+                        ancestor = ancestor._parentPortal;
+                    }
+                });
+            };
+            const cancelClose = () => { clearTimeout(sub._closeTimer); sub._closeTimer = null; };
+            const scheduleClose = () => { sub._closeTimer = setTimeout(closeThisPortal, 150); };
+            sub.addEventListener("mouseenter", function() {
+                cancelClose();
+                Bookmarks.cancelAncestorPortalClosers(sub);
+            });
+            sub.addEventListener("mouseleave", scheduleClose);
+            div.addEventListener("mouseenter", function() {
+                cancelClose();
+                Bookmarks.cancelAncestorPortalClosers(div.closest(".bm-dropdown-portal"));
+                // Remove sibling portals (not in this item's ancestor chain)
+                const ancestors = new Set();
+                let a = div.closest(".bm-dropdown-portal");
+                while (a) { ancestors.add(a); a = a._parentPortal; }
+                document.querySelectorAll(".bm-dropdown-portal").forEach(p => {
+                    if (!ancestors.has(p)) p.remove();
+                });
+                if (sub.parentNode !== document.body) {
+                    Bookmarks.openPortalDropdown(div, sub);
+                }
+            });
+            div.addEventListener("mouseleave", scheduleClose);
+        }
+        return div;
+    },
+    setupDropdownScroll: function(dropdown) {
+        const scrollArea = document.createElement("div");
+        scrollArea.classList.add("bm-dropdown-scroll-area");
+        while (dropdown.firstChild) scrollArea.appendChild(dropdown.firstChild);
+        const topArrow = document.createElement("div");
+        topArrow.classList.add("bm-scroll-arrow", "bm-scroll-up");
+        topArrow.textContent = "\u25B2";
+        const btmArrow = document.createElement("div");
+        btmArrow.classList.add("bm-scroll-arrow", "bm-scroll-down");
+        btmArrow.textContent = "\u25BC";
+        dropdown.appendChild(topArrow);
+        dropdown.appendChild(scrollArea);
+        dropdown.appendChild(btmArrow);
+        dropdown._scrollArea = scrollArea;
+        dropdown._updateScrollArrows = function() {
+            topArrow.classList.toggle("visible", scrollArea.scrollTop > 0);
+            btmArrow.classList.toggle("visible",
+                scrollArea.scrollTop + scrollArea.clientHeight < scrollArea.scrollHeight - 1);
+        };
+        let scrollInterval = null;
+        const stopScroll = () => { clearInterval(scrollInterval); scrollInterval = null; };
+        const startScroll = (dir) => {
+            stopScroll();
+            scrollInterval = setInterval(() => {
+                scrollArea.scrollTop += dir * 8;
+                dropdown._updateScrollArrows();
+            }, 16);
+        };
+        topArrow.addEventListener("mouseenter", () => startScroll(-1));
+        topArrow.addEventListener("mouseleave", stopScroll);
+        btmArrow.addEventListener("mouseenter", () => startScroll(1));
+        btmArrow.addEventListener("mouseleave", stopScroll);
+        scrollArea.addEventListener("scroll", dropdown._updateScrollArrows);
+        dropdown.addEventListener("mouseenter", dropdown._updateScrollArrows);
+    },
+    openPortalDropdown: function(anchor, dropdown) {
+        dropdown._parentPortal = anchor.closest(".bm-dropdown-portal") || null;
+        dropdown.classList.add("bm-dropdown-portal");
+        // Set position before appending so transition doesn't animate from 0,0
+        dropdown.style.cssText = "position:fixed;visibility:hidden;display:block;top:0;left:0;transition:none";
+        document.body.appendChild(dropdown);
+        const anchorRect = anchor.getBoundingClientRect();
+        const ddRect = dropdown.getBoundingClientRect();
+        let left = anchorRect.right;
+        let top = anchorRect.top;
+        if (left + ddRect.width > window.innerWidth) left = anchorRect.left - ddRect.width;
+        if (top + ddRect.height > window.innerHeight) top = window.innerHeight - ddRect.height;
+        dropdown.style.left = `${left}px`;
+        dropdown.style.top = `${top}px`;
+        dropdown.style.visibility = "";
+        if (dropdown._updateScrollArrows) dropdown._updateScrollArrows();
+    },
+    cancelAncestorPortalClosers: function(portal) {
+        while (portal) {
+            if (portal._closeTimer) { clearTimeout(portal._closeTimer); portal._closeTimer = null; }
+            portal = portal._parentPortal;
+        }
+    },
+    closePortals: function() {
+        document.querySelectorAll(".bm-dropdown-portal").forEach(el => el.remove());
+    },
+    closeAllDropdowns: function() {
+        document.querySelectorAll(".bm-folder.open").forEach(f => f.classList.remove("open"));
+        Bookmarks.closePortals();
+    },
+    handleOverflow: function() {
+        const toolbar = document.querySelector("#bookmarksToolbar");
+        if (!toolbar) return;
+        
+        // Remove any existing overflow button
+        toolbar.querySelector(".bm-overflow")?.remove();
+        
+        // Get all visible items
+        const items = [...toolbar.querySelectorAll(":scope > .bm-toolbar-item, :scope > .bm-toolbar-separator")].filter(item => !item.classList.contains("bm-overflow"));
+        
+        if (items.length === 0) return;
+        
+        // Show all items temporarily to measure
+        items.forEach(item => { item.style.display = ""; });
+        
+        // Force layout update
+        toolbar.offsetWidth;
+        
+        const maxWidth = window.innerWidth;
+        const OVERFLOW_BTN_WIDTH = 70;
+        const TOOLBAR_PADDING = 8;
+        
+        // Calculate which items overflow
+        let overflowStart = -1;
+        let accumulatedWidth = TOOLBAR_PADDING;
+        
+        for (let i = 0; i < items.length; i++) {
+            const itemWidth = items[i].offsetWidth + 1; // +1 for gap
+            const projectedTotal = accumulatedWidth + itemWidth + OVERFLOW_BTN_WIDTH;
+            
+            if (projectedTotal > maxWidth) {
+                overflowStart = i;
+                break;
+            }
+            accumulatedWidth += itemWidth;
+        }
+        
+        // No overflow needed
+        if (overflowStart === -1) return;
+        
+        // Hide overflowing items
+        const overflowItems = items.slice(overflowStart);
+        overflowItems.forEach(item => { item.style.display = "none"; });
+        
+        console.log(`Overflow triggered at item ${overflowStart} of ${items.length}, maxWidth: ${maxWidth}, accumulated: ${accumulatedWidth}`);
+        
+        // Create overflow button
+        const overflowBtn = document.createElement("div");
+        overflowBtn.classList.add("bm-toolbar-item", "bm-folder", "bm-overflow");
+        overflowBtn.title = "More bookmarks";
+        const overflowIcon = document.createElement("img");
+        overflowIcon.classList.add("bm-icon");
+        overflowIcon.width = 16;
+        overflowIcon.height = 16;
+        const api = Utils.isFirefox ? browser : chrome;
+        const isLightMode = document.documentElement.getAttribute('data-color-scheme') === 'light';
+        overflowIcon.src = api.runtime.getURL(isLightMode ? "icons/overflow-light.svg" : "icons/overflow.svg");
+        overflowIcon.style.filter = "var(--bookmarks-icon-filter, none)";
+        overflowBtn.appendChild(overflowIcon);
+        
+        const overflowDropdown = document.createElement("div");
+        overflowDropdown.classList.add("bm-dropdown");
+        overflowItems.forEach(item => {
+            if (item._bookmarkData) {
+                const dropdownItem = Bookmarks.createItem(item._bookmarkData, true);
+                if (dropdownItem) overflowDropdown.appendChild(dropdownItem);
+            }
+        });
+        Bookmarks.setupDropdownScroll(overflowDropdown);
+        overflowBtn.appendChild(overflowDropdown);
+        toolbar.appendChild(overflowBtn);
+        
+        overflowBtn.addEventListener("click", function(e) {
+            e.stopPropagation();
+            const isOpen = overflowBtn.classList.contains("open");
+            Bookmarks.closeAllDropdowns();
+            if (!isOpen) {
+                overflowBtn.classList.add("open");
+                document.addEventListener("click", Bookmarks.closeAllDropdowns, { once: true });
+            }
         });
     },
     list: {}
@@ -832,6 +1242,7 @@ document.addEventListener('auxclick', function(event) {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
+    Theme.load();
     Canvas.load();
     Bookmarks.load().then(TileOptions.initForm);
 });
@@ -849,4 +1260,5 @@ window.addEventListener("resize", function() {
     for(let tile of document.querySelectorAll('.tile')) {
         Tile.updateOverlay(tile);
     }
+    Bookmarks.handleOverflow();
 });
