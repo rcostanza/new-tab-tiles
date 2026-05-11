@@ -116,7 +116,7 @@ const Utils = {
             return faviconUrl.toString();
         }
     },
-    isFirefox: typeof(browser) != "undefined"
+    isFirefox: navigator.userAgent.indexOf("Firefox") != -1
 }
 
 const Canvas = {
@@ -715,7 +715,6 @@ const Storage = {
     },
     getBookmarksToolbarState: function(fn) {
         Storage._.get("canvas").then((data) => {
-            console.log(data);
             fn(data.canvas.bookmarksToolbarEnabled || false);
         });
     },
